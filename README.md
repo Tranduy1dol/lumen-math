@@ -17,6 +17,15 @@
 - [Branch Prediction](https://stackoverflow.com/questions/11227809/why-is-processing-a-sorted-array-faster-than-processing-an-unsorted-array)
 - [Constant-Time Code](https://www.bearssl.org/constanttime.html)
 
+## Day 3
+
+---
+- [`unsafe`](https://doc.rust-lang.org/nomicon/what-unsafe-does.html)
+- `overflow_add`, `overflow_sub` implementations for `U256` type.
+```
+cargo asm 'mathlib::num::u256::U256::wrapping_add'
+```
+
 ### Structure
 
 ---
@@ -46,6 +55,7 @@ mathlib/
 │       ├── fft.rs
 │       └── ntt.rs
 │
-└── benches/
-└── u256_arith.rs
+├── benches/
+│       ├── branch_benchmark.rs
+│       └── layout_benchmark.rs
 ```
