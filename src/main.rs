@@ -1,48 +1,32 @@
-use std::time::Instant;
-use rand::prelude::SliceRandom;
-use rand::thread_rng;
+// This assumes `u256.rs` is part of a `num` module exposed by your library.
+// If not, you might need `mod num;` here.
+use mathlib::num::u256::U256;
+use std::hint::black_box;
+
+// We use #[inline(never)] to make sure this function is not optimized away
+// and is easy to find in the assembly output.
+#[inline(never)]
+fn u256_add_example(a: &U256, b: &U256) -> U256 {
+    // This will call your `carrying_add` implementation.
+    a + b
+}
+
+// A separate function for subtraction.
+#[inline(never)]
+fn u256_sub_example(a: &U256, b: &U256) -> U256 {
+    // This will call your `borrowing_sub` implementation.
+    a - b
+}
 
 fn main() {
-    // 1. Generate a large vector of random data
-    let mut rng = thread_rng();
-    let mut data: Vec<u8> = (0..=255).cycle().take(32 * 1024).collect();
-    data.shuffle(&mut rng);
+    // Create two U256 instances.
+    let a = U256([100, 200, 300, 400]);
+    let b = U256([50, 60, 70, 80]);
 
-    // 2. Time the operation on unsorted (unpredictable) data
-    let start_unsorted = Instant::now();
-    let mut sum_unsorted: u64 = 0;
-    for &item in &data {
-        // The condition is unpredictable, leading to branch mispredictions
-        if item > 128 {
-            sum_unsorted += item as u64;
-        }
-    }
-    let duration_unsorted = start_unsorted.elapsed();
+    // Use black_box to ensure the function calls are not optimized out.
+    let sum = u256_add_example(black_box(&a), black_box(&b));
+    let diff = u256_sub_example(black_box(&a), black_box(&b));
 
-    // 3. Sort the data to make it predictable
-    data.sort_unstable();
-
-    // 4. Time the operation on sorted (predictable) data
-    let start_sorted = Instant::now();
-    let mut sum_sorted: u64 = 0;
-    for &item in &data {
-        // The condition is predictable:
-        // It will be 'false' for the first half and 'true' for the second half.
-        // The CPU's branch predictor learns this pattern easily.
-        if item > 128 {
-            sum_sorted += item as u64;
-        }
-    }
-    let duration_sorted = start_sorted.elapsed();
-
-    // 5. Print the results
-    println!("-- Branch Prediction Demo --");
-    println!(
-        "Unsorted (unpredictable) data took: {:.2?}",
-        duration_unsorted
-    );
-    println!("Sorted (predictable) data took:   {:.2?}", duration_sorted);
-    println!("\nSums (should be equal): {} vs {}", sum_unsorted, sum_sorted);
-
-    // The sorted version should be significantly faster!
+    // Print the results to make sure they are used.
+    println!("Sum: {:?}, Diff: {:?}", sum, diff);
 }
