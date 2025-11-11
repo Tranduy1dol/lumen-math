@@ -11,10 +11,18 @@ pub struct FieldElement {
 
 impl FieldElement {
     pub fn new(val: U256, modulus: U256) -> Self {
-        Self {
-            inner: val,
-            modulus,
+        debug_assert!(modulus != U256::ZERO, "modulus must be non-zero");
+
+        let mut inner = val;
+        loop {
+            let (candidate, borrow) = inner.borrowing_sub(&modulus);
+            if borrow {
+                break;
+            }
+            inner = candidate;
         }
+
+        Self { inner, modulus }
     }
 }
 
@@ -24,10 +32,11 @@ impl Add for FieldElement {
     fn add(self, rhs: Self) -> Self::Output {
         debug_assert_eq!(self.modulus, rhs.modulus);
 
-        let (sum, _carry) = self.inner.carrying_add(&rhs.inner);
+        let (sum, carry) = self.inner.carrying_add(&rhs.inner);
         let (sum_norm, borrow) = sum.borrowing_sub(&self.modulus);
 
-        let inner = U256::conditional_select(&sum_norm, &sum, !borrow);
+        let use_reduced = !borrow || carry;
+        let inner = U256::conditional_select(&sum_norm, &sum, use_reduced);
 
         Self {
             inner,
@@ -147,5 +156,25 @@ mod tests {
         let a = fe(5);
         let b = fe(0);
         assert_eq!(a - b, a);
+    }
+
+    #[test]
+    fn test_add_with_wraparound() {
+        // Test addition that overflows U256.
+        // Let modulus = 2^256 - 1.
+        let modulus = U256([u32::MAX; 8]);
+
+        // Let a = modulus - 1 and b = 2.
+        let a_val = modulus.borrowing_sub(&U256::ONE).0;
+        let b_val = u256_from_u64(2);
+
+        let a = FieldElement::new(a_val, modulus);
+        let b = FieldElement::new(b_val, modulus);
+
+        // (modulus - 1) + 2 = modulus + 1.
+        // The raw sum overflows U256, resulting in a value of 1 with a carry.
+        // The correct result mod (2^256 - 1) is 1.
+        let result = a + b;
+        assert_eq!(result.inner, U256::ONE);
     }
 }

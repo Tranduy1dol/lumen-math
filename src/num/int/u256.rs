@@ -45,14 +45,14 @@ impl U256 {
 
         #[cfg(target_arch = "x86_64")]
         if is_x86_feature_detected!("avx2") {
-            unsafe { crate::arch::x86_64::avx2::u256_conditional_select_avx2(a, b, &mask) }
-        } else {
-            let mut result = Self::ZERO;
-            for i in 0..8 {
-                result.0[i] = (a.0[i] & mask.0[i]) | (b.0[i] & !mask.0[i]);
-            }
-            result
+            return unsafe { crate::arch::x86_64::avx2::u256_conditional_select_avx2(a, b, &mask) };
         }
+
+        let mut result = Self::ZERO;
+        for i in 0..8 {
+            result.0[i] = (a.0[i] & mask.0[i]) | (b.0[i] & !mask.0[i]);
+        }
+        result
     }
 }
 
