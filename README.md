@@ -1,6 +1,6 @@
 # mathlib
 
-[![codecov](https://codecov.io/gh/tranduy1dol/mathlib/branch/main/graph/badge.svg)](https://codecov.io/gh/tranduy1dol/mathlib)
+[![codecov](https://codecov.io/gh/Tranduy1dol/mathlib/graph/badge.svg?token=S88FB34UD6)](https://codecov.io/gh/Tranduy1dol/mathlib)
 
 ---
 ## Day 1
