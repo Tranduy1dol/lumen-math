@@ -1,4 +1,4 @@
-pub mod arch;
-pub mod core;
-pub mod num;
+pub mod big_int;
+pub mod field;
 pub mod poly;
+pub mod traits;
