@@ -1,5 +1,4 @@
 use crate::big_int::U1024;
-use crate::traits::BigInt;
 
 #[derive(Clone, Debug)]
 pub struct MontgomeryParams {
@@ -29,6 +28,6 @@ impl MontgomeryParams {
 
     fn compute_r2(modulus: &U1024) -> U1024 {
         // TODO: Implement compute_r2 properly
-        U1024::zero()
+        unimplemented!("compute_r2 not implemented yet")
     }
 }

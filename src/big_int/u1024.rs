@@ -2,7 +2,7 @@ use std::fmt;
 use std::ops::{Add, BitXor, Mul, Sub};
 
 #[cfg(feature = "gmp")]
-use libc::c_ulong;
+use libc::c_long;
 
 #[cfg(feature = "gmp")]
 use crate::big_int::backend::gmp;
@@ -24,7 +24,7 @@ impl U1024 {
                 result.0.as_mut_ptr(),
                 self.0.as_ptr(),
                 rhs.0.as_ptr(),
-                LIMBS as c_ulong,
+                LIMBS as c_long,
             );
             (result, carry != 0)
         }
@@ -39,51 +39,83 @@ impl U1024 {
                 result.0.as_mut_ptr(),
                 self.0.as_ptr(),
                 rhs.0.as_ptr(),
-                LIMBS as c_ulong,
+                LIMBS as c_long,
             );
             (result, borrow != 0)
         }
     }
 
-    pub fn full_mul(&self, rhs: &Self) -> (Self, Self) {
-        let mut res_buffer = [0u64; LIMBS * 2];
+    pub fn full_mul(&self, _rhs: &Self) -> (Self, Self) {
+        #[cfg(feature = "gmp")]
+        {
+            let mut res_buffer = [0u64; LIMBS * 2];
 
-        unsafe {
-            #[cfg(feature = "gmp")]
-            gmp::__gmpn_mul_n(
-                res_buffer.as_mut_ptr(),
-                self.0.as_ptr(),
-                rhs.0.as_ptr(),
-                LIMBS as c_ulong,
-            );
+            unsafe {
+                gmp::__gmpn_mul_n(
+                    res_buffer.as_mut_ptr(),
+                    self.0.as_ptr(),
+                    _rhs.0.as_ptr(),
+                    LIMBS as c_long,
+                );
+            }
+
+            let mut low = U1024([0; LIMBS]);
+            let mut high = U1024([0; LIMBS]);
+
+            low.0.copy_from_slice(&res_buffer[0..LIMBS]);
+            high.0.copy_from_slice(&res_buffer[LIMBS..LIMBS * 2]);
+
+            (low, high)
         }
 
-        let mut low = U1024([0; LIMBS]);
-        let mut high = U1024([0; LIMBS]);
-
-        low.0.copy_from_slice(&res_buffer[0..LIMBS]);
-        high.0.copy_from_slice(&res_buffer[LIMBS..LIMBS * 2]);
-
-        (low, high)
+        #[cfg(not(feature = "gmp"))]
+        unimplemented!("U1024::full_mul requires the gmp feature");
     }
 
-    pub fn div_rem(&self, modulus: &Self) -> (Self, Self) {
-        let mut q = U1024::zero();
-        let mut r = U1024::zero();
+    pub fn div_rem(&self, _modulus: &Self) -> (Self, Self) {
+        #[cfg(feature = "gmp")]
+        {
+            let mut dn = LIMBS;
+            while dn > 0 && _modulus.0[dn - 1] == 0 {
+                dn -= 1;
+            }
 
-        unsafe {
-            #[cfg(feature = "gmp")]
-            gmp::__gmpn_tdiv_qr(
-                q.0.as_mut_ptr(),
-                r.0.as_mut_ptr(),
-                0,
-                self.0.as_ptr(),
-                LIMBS as c_ulong,
-                modulus.0.as_ptr(),
-                LIMBS as c_ulong,
-            );
+            if dn == 0 {
+                panic!("Division by zero in U1024::div_rem");
+            }
+
+            let mut nn = LIMBS;
+            while nn > 0 && self.0[nn - 1] == 0 {
+                nn -= 1;
+            }
+
+            if nn == 0 {
+                return (U1024::zero(), U1024::zero());
+            }
+
+            if nn < dn {
+                return (U1024::zero(), *self);
+            }
+
+            let mut q = U1024::zero();
+            let mut r = U1024::zero();
+
+            unsafe {
+                gmp::__gmpn_tdiv_qr(
+                    q.0.as_mut_ptr(),
+                    r.0.as_mut_ptr(),
+                    0,
+                    self.0.as_ptr(),
+                    nn as c_long,
+                    _modulus.0.as_ptr(),
+                    dn as c_long,
+                );
+            }
+            (q, r)
         }
-        (q, r)
+
+        #[cfg(not(feature = "gmp"))]
+        unimplemented!("U1024::div_rem requires the gmp feature");
     }
 }
 
