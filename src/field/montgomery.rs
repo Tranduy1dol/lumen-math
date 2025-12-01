@@ -1,11 +1,12 @@
 use crate::U1024;
 use crate::traits::BigInt;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Copy)]
 pub struct MontgomeryParams {
     pub modulus: U1024,
     pub r2: U1024,
     pub n_prime: U1024,
+    pub root_of_unity: U1024,
 }
 
 impl MontgomeryParams {
@@ -24,7 +25,7 @@ impl MontgomeryParams {
     /// let params = MontgomeryParams::new(m.clone());
     /// assert_eq!(params.modulus, m);
     /// ```
-    pub fn new(modulus: U1024) -> Self {
+    pub fn new(modulus: U1024, root_of_unity: U1024) -> Self {
         let n_prime = Self::compute_n_prime(&modulus);
         let r2 = Self::compute_r2(&modulus);
 
@@ -32,6 +33,7 @@ impl MontgomeryParams {
             modulus,
             r2,
             n_prime,
+            root_of_unity,
         }
     }
 

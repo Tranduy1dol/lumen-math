@@ -5,7 +5,7 @@ use crate::U1024;
 use crate::field::montgomery::MontgomeryParams;
 use crate::traits::BigInt;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct FieldElement<'a> {
     pub value: U1024,
     pub params: &'a MontgomeryParams,

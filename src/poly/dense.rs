@@ -116,9 +116,9 @@ impl<'a> DensePolynomial<'a> {
             return FieldElement::zero(x.params);
         }
 
-        let mut res = self.coeffs.last().unwrap().clone();
+        let mut res = *self.coeffs.last().unwrap();
         for i in (0..self.coeffs.len() - 1).rev() {
-            res = (res * x.clone()) + self.coeffs[i].clone();
+            res = (res * *x) + self.coeffs[i];
         }
         res
     }
@@ -161,7 +161,7 @@ impl<'a> Add for DensePolynomial<'a> {
         for i in 0..max_len {
             let a = self.coeffs.get(i).unwrap_or(&zero);
             let b = rhs.coeffs.get(i).unwrap_or(&zero);
-            new_coeffs.push(a.clone() + b.clone());
+            new_coeffs.push(*a + *b);
         }
 
         Self::new(new_coeffs)
@@ -211,8 +211,8 @@ impl<'a> Mul for DensePolynomial<'a> {
 
         for (i, a) in self.coeffs.iter().enumerate() {
             for (j, b) in rhs.coeffs.iter().enumerate() {
-                let product = a.clone() * b.clone();
-                res[i + j] = res[i + j].clone() + product;
+                let product = *a * *b;
+                res[i + j] = res[i + j] + product;
             }
         }
 
