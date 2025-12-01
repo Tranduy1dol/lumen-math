@@ -24,7 +24,7 @@ impl<'a> DensePolynomial<'a> {
     ///
     /// // Create a polynomial and have trailing zero coefficients trimmed
     /// let modulus = U1024::from_u64(17);
-    /// let params = MontgomeryParams::new(modulus);
+    /// let params = MontgomeryParams::new(modulus, U1024::from_u64(2));
     /// let coeffs = vec![FieldElement::one(&params), FieldElement::zero(&params)];
     /// let poly = DensePolynomial::new(coeffs);
     /// assert_eq!(poly.coeffs.len(), 1);
@@ -54,7 +54,7 @@ impl<'a> DensePolynomial<'a> {
     /// // constructing via `DensePolynomial::new` will result in those trailing
     /// // zeros being removed (internally by `trim`).
     /// let modulus = U1024::from_u64(17);
-    /// let params = MontgomeryParams::new(modulus);
+    /// let params = MontgomeryParams::new(modulus, U1024::from_u64(2));
     /// let p = DensePolynomial::new(vec![FieldElement::one(&params), FieldElement::zero(&params)]);
     /// // trailing zero coefficients are removed so the length is shorter than input
     /// assert!(p.coeffs.len() < 2);
@@ -101,7 +101,7 @@ impl<'a> DensePolynomial<'a> {
     ///
     /// // Construct a polynomial p(x) = 3 + 2*x + 1*x^2 (coeffs are [3, 2, 1])
     /// let modulus = U1024::from_u64(17);
-    /// let params = MontgomeryParams::new(modulus);
+    /// let params = MontgomeryParams::new(modulus, U1024::from_u64(2));
     /// let three = FieldElement::new(U1024::from_u64(3), &params);
     /// let two = FieldElement::new(U1024::from_u64(2), &params);
     /// let one = FieldElement::new(U1024::from_u64(1), &params);
@@ -187,7 +187,7 @@ impl<'a> Mul for DensePolynomial<'a> {
     ///
     /// // (1 + 2x) * (3 + 4x) = 3 + 10x + 8x^2
     /// let modulus = U1024::from_u64(17);
-    /// let params = MontgomeryParams::new(modulus);
+    /// let params = MontgomeryParams::new(modulus, U1024::from_u64(2));
     /// let one = FieldElement::new(U1024::from_u64(1), &params);
     /// let two = FieldElement::new(U1024::from_u64(2), &params);
     /// let three = FieldElement::new(U1024::from_u64(3), &params);
