@@ -1,10 +1,13 @@
 use std::fmt;
 use std::ops::{Add, BitXor, Mul, Sub};
 
+#[cfg(feature = "gmp")]
+use libc::c_ulong;
+
+#[cfg(feature = "gmp")]
 use crate::big_int::backend::gmp;
 use crate::traits::BigInt;
 
-// U1024 = 16 x 64-bit limbs
 const LIMBS: usize = 16;
 
 #[repr(C)]
@@ -12,6 +15,7 @@ const LIMBS: usize = 16;
 pub struct U1024(pub [u64; LIMBS]);
 
 impl U1024 {
+    #[cfg(feature = "gmp")]
     #[inline(always)]
     fn gmp_add(&self, rhs: &Self) -> (Self, bool) {
         let mut result = U1024([0; LIMBS]);
@@ -20,13 +24,13 @@ impl U1024 {
                 result.0.as_mut_ptr(),
                 self.0.as_ptr(),
                 rhs.0.as_ptr(),
-                LIMBS as u64,
+                LIMBS as c_ulong,
             );
             (result, carry != 0)
         }
     }
 
-    /// Wrapper an toàn cho GMP Sub
+    #[cfg(feature = "gmp")]
     #[inline(always)]
     fn gmp_sub(&self, rhs: &Self) -> (Self, bool) {
         let mut result = U1024([0; LIMBS]);
@@ -35,14 +39,13 @@ impl U1024 {
                 result.0.as_mut_ptr(),
                 self.0.as_ptr(),
                 rhs.0.as_ptr(),
-                LIMBS as u64,
+                LIMBS as c_ulong,
             );
             (result, borrow != 0)
         }
     }
 }
 
-// --- Implement Trait BigInt ---
 impl BigInt for U1024 {
     const NUM_LIMBS: usize = LIMBS;
 
@@ -63,11 +66,9 @@ impl BigInt for U1024 {
     }
 
     fn carrying_add(&self, rhs: &Self) -> (Self, bool) {
-        // Nếu feature "gmp" được bật (mặc định), dùng GMP
         #[cfg(feature = "gmp")]
         return self.gmp_add(rhs);
 
-        // Nếu không (fallback), dùng code Rust thuần (sẽ làm vào ngày 4)
         #[cfg(not(feature = "gmp"))]
         unimplemented!("Native rust backend not implemented yet");
     }
@@ -90,7 +91,6 @@ impl BigInt for U1024 {
     }
 }
 
-// --- Operator Overloading ---
 impl Add for U1024 {
     type Output = Self;
     fn add(self, rhs: Self) -> Self {
@@ -105,7 +105,6 @@ impl Sub for U1024 {
     }
 }
 
-// Placeholder cho Mul (sẽ làm vào Ngày 2)
 impl Mul for U1024 {
     type Output = Self;
     fn mul(self, _rhs: Self) -> Self {
@@ -113,7 +112,6 @@ impl Mul for U1024 {
     }
 }
 
-// Placeholder cho BitXor
 impl BitXor for U1024 {
     type Output = Self;
     fn bitxor(self, _rhs: Self) -> Self {
@@ -121,7 +119,6 @@ impl BitXor for U1024 {
     }
 }
 
-// Hiển thị Hex để debug
 impl Default for U1024 {
     fn default() -> Self {
         Self::zero()

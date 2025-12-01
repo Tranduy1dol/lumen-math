@@ -1,6 +1,6 @@
 [package]
 name = "mathlib"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
@@ -19,7 +19,7 @@ num-traits = "0.2"
 proptest = "1.4"
 
 [features]
-default = ["std", "gmp", "avx2"]
+default = ["std"]
 std = []
 gmp = []
 avx2 = []
