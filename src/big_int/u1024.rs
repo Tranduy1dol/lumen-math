@@ -22,6 +22,26 @@ pub(crate) const LIMBS: usize = 16;
 pub struct U1024(pub [u64; LIMBS]);
 
 impl U1024 {
+    pub fn bit(&self, index: usize) -> bool {
+        if index >= 1024 {
+            return false;
+        }
+
+        let limb_idx = index / 64;
+        let bit_idx = index % 64;
+
+        (self.0[limb_idx] >> bit_idx) & 1 == 1
+    }
+
+    pub fn bits(&self) -> usize {
+        for (i, limb) in self.0.iter().enumerate().rev() {
+            if *limb != 0 {
+                return (i + 1) * 64 - limb.leading_zeros() as usize;
+            }
+        }
+        0
+    }
+
     pub fn from_hex(hex: &str) -> Self {
         let hex = hex.trim_start_matches("0x");
         assert!(hex.len() <= 256, "Hex string too long for U1024");
