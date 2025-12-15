@@ -1,5 +1,5 @@
 use std::fmt;
-use std::ops::{Add, Mul, Sub};
+use std::ops::{Add, Mul, Neg, Sub};
 
 use crate::U1024;
 use crate::field::montgomery::MontgomeryParams;
@@ -261,6 +261,57 @@ impl<'a> FieldElement<'a> {
         let (p_minus_2, _) = self.params.modulus.borrowing_sub(&two);
         self.pow(p_minus_2)
     }
+
+    /// Checks if this element is zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mathlib::{fp, mont};
+    ///
+    /// let params = mont!(17u64, 2u64);
+    /// let zero = fp!(0u64, &params);
+    /// let one = fp!(1u64, &params);
+    /// assert!(zero.is_zero());
+    /// assert!(!one.is_zero());
+    /// ```
+    pub fn is_zero(&self) -> bool {
+        self.value == U1024::zero()
+    }
+
+    /// Doubles this field element (computes 2 * self).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mathlib::{fp, mont, u1024};
+    ///
+    /// let params = mont!(17u64, 2u64);
+    /// let a = fp!(3u64, &params);
+    /// let doubled = a.double();
+    /// // 2 * 3 = 6 mod 17
+    /// assert_eq!(doubled.to_u1024(), u1024!(6u64));
+    /// ```
+    pub fn double(&self) -> Self {
+        *self + *self
+    }
+
+    /// Squares this field element (computes self * self).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mathlib::{fp, mont, u1024};
+    ///
+    /// let params = mont!(17u64, 2u64);
+    /// let a = fp!(4u64, &params);
+    /// let squared = a.square();
+    /// // 4^2 = 16 mod 17
+    /// assert_eq!(squared.to_u1024(), u1024!(16u64));
+    /// ```
+    pub fn square(&self) -> Self {
+        *self * *self
+    }
 }
 
 impl<'a> Add for FieldElement<'a> {
@@ -349,6 +400,37 @@ impl<'a> Mul for FieldElement<'a> {
         Self {
             value: res,
             params: self.params,
+        }
+    }
+}
+
+impl<'a> Neg for FieldElement<'a> {
+    type Output = Self;
+    /// Negates the field element, returning `-self` modulo the field modulus.
+    ///
+    /// This computes the additive inverse such that `self + (-self) = 0`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mathlib::{fp, mont, u1024};
+    ///
+    /// let params = mont!(17u64, 2u64);
+    /// let a = fp!(5u64, &params);
+    /// let neg_a = -a;
+    /// // -5 mod 17 = 12
+    /// assert_eq!(neg_a.to_u1024(), u1024!(12u64));
+    /// assert_eq!((a + neg_a).to_u1024(), u1024!(0u64));
+    /// ```
+    fn neg(self) -> Self {
+        if self.is_zero() {
+            self
+        } else {
+            let (value, _) = self.params.modulus.borrowing_sub(&self.value);
+            Self {
+                value,
+                params: self.params,
+            }
         }
     }
 }
