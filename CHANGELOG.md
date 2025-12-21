@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-12-21
+
+### Added
+
+- **Enhanced Polynomial Module**: ZK-STARK-style polynomial operations
+  - **`Polynomial<C>`**: Unified univariate polynomial with comprehensive operations:
+    - `divide_with_remainder()` - Polynomial long division
+    - `interpolate()` - Lagrange interpolation
+    - `derivative()` - Formal derivative computation
+    - `zerofier()` - Create vanishing polynomials
+    - `compose()` - Polynomial composition
+    - `scale()` / `shift()` - Coefficient transformations
+    - `evaluate_batch()` - Multi-point evaluation
+    - `mul_ntt()` / `mul_fast()` - NTT-based fast multiplication
+  - **`MultivariatePolynomial<C>`**: Multivariate polynomial support:
+    - Sparse representation using `BTreeMap`
+    - Arbitrary number of variables
+    - `partial_evaluate()` - Partially fix variables
+    - `degree_in()` / `total_degree()` - Degree tracking
+    - Conversion to/from univariate polynomials
+  - **Mathematical Display**: Polynomials display as `3x^2 + 2x + 1`
+
+- **U1024 Byte Conversion Methods**:
+  - `to_le_bytes()` - Convert to 128-byte little-endian array
+  - `to_be_bytes()` - Convert to 128-byte big-endian array
+  - Complements existing `from_le_bytes()` and `from_be_bytes()`
+
+### Changed
+
+- **Refactored `DensePolynomial`**: Now a type alias for `Polynomial`
+  - Eliminates ~200 lines of duplicate code
+  - All `DensePolynomial` code continues to work unchanged
+  - `mul_fast()` method preserved for backward compatibility
+
+### Improved
+
+- **Comprehensive Integration Tests**: 30+ new polynomial tests
+  - Univariate: arithmetic, division, interpolation, derivative, zerofier
+  - Multivariate: evaluation, partial evaluation, degree tracking
+  - Cross-type: consistency between univariate and multivariate
+
 ## [1.0.0] - 2025-12-19
 
 ### ⚠️ BREAKING CHANGES
