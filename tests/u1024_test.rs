@@ -221,3 +221,86 @@ fn test_u1024_full_mul() {
     assert_eq!(low.0[0], 6);
     assert_eq!(high.0[0], 0);
 }
+
+#[test]
+fn test_u1024_to_le_bytes_roundtrip() {
+    let original = U1024([
+        0x0102030405060708,
+        0x1112131415161718,
+        0x2122232425262728,
+        0x3132333435363738,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ]);
+
+    let bytes = original.to_le_bytes();
+    let recovered = U1024::from_le_bytes(&bytes);
+
+    assert_eq!(original, recovered);
+}
+
+#[test]
+fn test_u1024_to_be_bytes_roundtrip() {
+    let original = U1024([
+        0x0102030405060708,
+        0x1112131415161718,
+        0x2122232425262728,
+        0x3132333435363738,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+    ]);
+
+    let bytes = original.to_be_bytes();
+    let recovered = U1024::from_be_bytes(&bytes);
+
+    assert_eq!(original, recovered);
+}
+
+#[test]
+fn test_u1024_to_le_bytes_values() {
+    let val = U1024::from_le_bytes(&[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+    let bytes = val.to_le_bytes();
+
+    // First 8 bytes should match input
+    assert_eq!(bytes[0], 0x01);
+    assert_eq!(bytes[1], 0x02);
+    assert_eq!(bytes[7], 0x08);
+
+    // Rest should be zero
+    assert_eq!(bytes[8], 0x00);
+}
+
+#[test]
+fn test_u1024_to_be_bytes_values() {
+    // 8 bytes in big endian, should appear at the END of the 128-byte array
+    let val = U1024::from_be_bytes(&[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+    let bytes = val.to_be_bytes();
+
+    // Last 8 bytes should match input
+    assert_eq!(bytes[120], 0x01);
+    assert_eq!(bytes[121], 0x02);
+    assert_eq!(bytes[127], 0x08);
+
+    // First bytes should be zero
+    assert_eq!(bytes[0], 0x00);
+}

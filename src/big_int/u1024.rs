@@ -494,6 +494,54 @@ impl U1024 {
         res
     }
 
+    /// Converts this U1024 value to a 128-byte array in little-endian order.
+    ///
+    /// The least-significant byte is at index 0.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mathlib::U1024;
+    ///
+    /// let v = U1024::from_le_bytes(&[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+    /// let bytes = v.to_le_bytes();
+    /// assert_eq!(&bytes[..8], &[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+    /// ```
+    pub fn to_le_bytes(&self) -> [u8; 128] {
+        let mut result = [0u8; 128];
+        for (i, &limb) in self.0.iter().enumerate() {
+            let bytes = limb.to_le_bytes();
+            let offset = i * 8;
+            result[offset..offset + 8].copy_from_slice(&bytes);
+        }
+        result
+    }
+
+    /// Converts this U1024 value to a 128-byte array in big-endian order.
+    ///
+    /// The most-significant byte is at index 0.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mathlib::U1024;
+    ///
+    /// let v = U1024::from_be_bytes(&[0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+    /// let bytes = v.to_be_bytes();
+    /// // 8 bytes read as big-endian go to the high end of the buffer
+    /// assert_eq!(bytes[120..128], [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
+    /// ```
+    pub fn to_be_bytes(&self) -> [u8; 128] {
+        let mut result = [0u8; 128];
+        for (i, &limb) in self.0.iter().enumerate() {
+            let bytes = limb.to_be_bytes();
+            // Limb 0 (least significant) goes to the end of the array
+            let offset = (LIMBS - 1 - i) * 8;
+            result[offset..offset + 8].copy_from_slice(&bytes);
+        }
+        result
+    }
+
     #[cfg(feature = "gmp")]
     #[inline(always)]
     fn gmp_add(&self, rhs: &Self) -> (Self, bool) {
