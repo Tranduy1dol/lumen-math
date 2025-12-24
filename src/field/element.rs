@@ -296,3 +296,23 @@ impl<C: FieldConfig> PartialEq for FieldElement<C> {
 }
 
 impl<C: FieldConfig> Eq for FieldElement<C> {}
+
+// Digest implementation
+use crate::traits::Digest;
+
+impl<C: FieldConfig> Digest for FieldElement<C> {
+    /// Creates a field element by hashing the input bytes.
+    ///
+    /// Uses SHA256-based hashing to derive a U1024 value, then reduces
+    /// it modulo the field prime.
+    fn from_hash(input: &[u8]) -> Self {
+        let value = U1024::from_hash(input);
+        Self::new(value)
+    }
+
+    /// Creates a field element by hashing with domain separation.
+    fn from_hash_with_domain(domain: &[u8], input: &[u8]) -> Self {
+        let value = U1024::from_hash_with_domain(domain, input);
+        Self::new(value)
+    }
+}

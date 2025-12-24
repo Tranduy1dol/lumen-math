@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-12-24
+
+### Added
+
+- **Signed Big Integer `I1024`**: New signed 1024-bit integer type
+  - Magnitude + sign representation for negative value support
+  - Full arithmetic: `Add`, `Sub`, `Mul`, `Neg`
+  - `sub_mul()` optimized for Extended Euclidean Algorithm
+  - `i1024!` macro for convenient construction
+  - Used by `ExtendedGcdResult` for Bézout coefficients
+
+- **`Digest` Trait**: New trait for hash-to-value operations
+  - `from_hash(input: &[u8])` - Hash bytes to a cryptographic type
+  - `from_hash_with_domain(domain, input)` - Hash with domain separation
+  - Implemented for `U1024` and `FieldElement<C>`
+  - Uses RFC 9380 `expand_message_xmd` for constant-time, unbiased hashing
+
+- **Modular Arithmetic Methods on `U1024`**:
+  - `mod_mul(&self, other, modulus)` - Modular multiplication with 2048-bit intermediate
+  - `mod_pow(&self, exp, modulus)` - Modular exponentiation (square-and-multiply)
+  - `cge(&self, exp, modulus)` - Alias for mod_pow (cyclic group exponentiation)
+
+- **`protocol` Module**: New module for cryptographic protocols
+  - `protocol::gcd` - Extended Euclidean Algorithm
+    - `extended_gcd(a, b)` returns `ExtendedGcdResult` with GCD and Bézout coefficients
+    - `mod_inverse(a, m)` computes multiplicative inverse
+  - `protocol::crt` - Chinese Remainder Theorem
+    - `chinese_remainder_solver(remainders, moduli)` solves congruence systems
+    - `chinese_remainder(a1, n1, a2, n2)` convenience wrapper for two congruences
+    - `CrtError` enum for error handling
+
+### Improved
+
+- **Cleaner Import Paths**:
+  - `use mathlib::protocol::{extended_gcd, chinese_remainder};`
+  - `use mathlib::{U1024, I1024, Digest};`
+
+### Migration Guide
+
+```rust
+// Old (1.1.0)
+use mathlib::algorithms::{extended_gcd, mod_pow, hash_to_field};
+let result = mod_pow(base, exp, modulus);
+let fe: FieldElement<C> = hash_to_field(b"data");
+
+// New (1.2.0)
+use mathlib::protocol::extended_gcd;
+use mathlib::{U1024, Digest, FieldElement};
+let result = base.mod_pow(&exp, &modulus);
+let fe = FieldElement::<C>::from_hash(b"data");
+```
+
 ## [1.1.0] - 2025-12-21
 
 ### Added
@@ -108,9 +160,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **NTT Tests**: 10 tests for various sizes, edge cases, and correctness
   - **U1024 Tests**: 18 tests for const arithmetic and all operations
   - All tests pass with zero warnings via `cargo clippy`
-
-For migration instructions, see [migration_guide.md](migration_guide.md).
-
 
 ## [0.4.0] - 2025-12-15
 
