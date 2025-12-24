@@ -304,3 +304,97 @@ fn test_u1024_to_be_bytes_values() {
     // First bytes should be zero
     assert_eq!(bytes[0], 0x00);
 }
+
+#[test]
+fn test_u1024_shift_left() {
+    let a = u1024!(1u64);
+    assert_eq!(a << 0, a);
+    assert_eq!(a << 1, u1024!(2u64));
+    assert_eq!(a << 10, u1024!(1024u64));
+
+    // Shift across limb boundary (64 bits)
+    let b = u1024!(1u64);
+    let shifted = b << 64;
+    assert_eq!(shifted.0[0], 0);
+    assert_eq!(shifted.0[1], 1);
+
+    // Shift large amount
+    let c = u1024!(1u64);
+    let large_shift = c << 1000;
+    assert!(large_shift > u1024!(0));
+    assert_eq!(large_shift.bits(), 1001);
+}
+
+#[test]
+fn test_u1024_shift_right() {
+    let a = u1024!(1024u64);
+    assert_eq!(a >> 0, a);
+    assert_eq!(a >> 1, u1024!(512u64));
+    assert_eq!(a >> 10, u1024!(1u64));
+
+    // Shift across limb boundary
+    let mut b = U1024::zero();
+    b.0[1] = 1; // 2^64
+    let shifted = b >> 64;
+    assert_eq!(shifted, u1024!(1u64));
+
+    // Shift large amount
+    // Construct MAX manually
+    let c = U1024([u64::MAX; 16]);
+    let zero = c >> 1024;
+    assert_eq!(zero, U1024::ZERO);
+}
+
+#[test]
+fn test_u1024_with_bit() {
+    let a = U1024::ZERO;
+    let b = a.with_bit(0);
+    assert_eq!(b, u1024!(1u64));
+
+    let c = a.with_bit(64);
+    assert_eq!(c.0[1], 1);
+    assert_eq!(c.0[0], 0);
+
+    let d = a.with_bit(1023);
+    assert!(d.bit(1023));
+}
+
+#[test]
+fn test_u1024_div_rem() {
+    let a = u1024!(100u64);
+    let b = u1024!(25u64);
+    let (q, r) = a.div_rem(&b);
+    assert_eq!(q, u1024!(4u64));
+    assert_eq!(r, U1024::ZERO);
+
+    let c = u1024!(100u64);
+    let d = u1024!(30u64);
+    let (q2, r2) = c.div_rem(&d);
+    assert_eq!(q2, u1024!(3u64)); // 3 * 30 = 90
+    assert_eq!(r2, u1024!(10u64)); // 100 - 90 = 10
+}
+
+#[test]
+#[should_panic(expected = "Division by zero")]
+fn test_u1024_div_rem_zero_panic() {
+    let a = u1024!(100u64);
+    let b = U1024::ZERO;
+    a.div_rem(&b);
+}
+
+#[test]
+fn test_u1024_div_rem_edge() {
+    // Divide by larger number
+    let a = u1024!(10u64);
+    let b = u1024!(20u64);
+    let (q, r) = a.div_rem(&b);
+    assert_eq!(q, U1024::ZERO);
+    assert_eq!(r, a);
+
+    // Divide max
+    let max = U1024([u64::MAX; 16]);
+    let (q2, r2) = max.div_rem(&u1024!(2u64));
+    // q2 should be max >> 1
+    assert_eq!(q2, max >> 1);
+    assert_eq!(r2, u1024!(1u64)); // max is odd
+}

@@ -11,6 +11,7 @@
 
 use super::gcd::mod_inverse;
 use crate::U1024;
+use crate::traits::BigInt;
 
 /// Error type for Chinese Remainder Theorem operations.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,6 +22,8 @@ pub enum CrtError {
     ModuliNotCoprime,
     /// Mismatched lengths of remainders and moduli.
     LengthMismatch,
+    /// Product of moduli overflows U1024.
+    ProductOverflow,
 }
 
 impl std::fmt::Display for CrtError {
@@ -29,6 +32,7 @@ impl std::fmt::Display for CrtError {
             CrtError::EmptyInput => write!(f, "No congruences provided"),
             CrtError::ModuliNotCoprime => write!(f, "Moduli must be pairwise coprime"),
             CrtError::LengthMismatch => write!(f, "Remainders and moduli must have same length"),
+            CrtError::ProductOverflow => write!(f, "Product of moduli overflows 1024 bits"),
         }
     }
 }
@@ -84,8 +88,11 @@ pub fn chinese_remainder_solver(remainders: &[U1024], moduli: &[U1024]) -> Resul
     // Compute the product of all moduli
     let mut n = U1024::from_u64(1);
     for m in moduli {
-        let (prod, _) = n.const_mul(m);
-        n = prod;
+        let (prod_lo, prod_hi) = n.const_mul(m);
+        if prod_hi != U1024::ZERO {
+            return Err(CrtError::ProductOverflow);
+        }
+        n = prod_lo;
     }
 
     let mut result = U1024::ZERO;
@@ -98,12 +105,24 @@ pub fn chinese_remainder_solver(remainders: &[U1024], moduli: &[U1024]) -> Resul
         let y_i = mod_inverse(big_n_i, *n_i).ok_or(CrtError::ModuliNotCoprime)?;
 
         // Compute a_i * N_i * y_i mod n
-        let (prod1, _) = a_i.const_mul(&big_n_i);
-        let (prod2, _) = prod1.const_mul(&y_i);
+        // We use mod_mul to safely handle products up to 2048 bits.
+        // term = (a_i * N_i * y_i) mod n
+        let tmp = a_i.mod_mul(&big_n_i, &n);
+        let term = tmp.mod_mul(&y_i, &n);
 
         // Add to result mod n
-        result = result + prod2;
-        result = result % n;
+        // result = (result + term) % n
+        let (sum, carry) = result.carrying_add(&term);
+        if carry {
+            // sum wrapped around 2^1024
+            // true_sum = sum + 2^1024
+            // result = (sum + 2^1024) % n
+            // 2^1024 % n is computed as (0 - n) % n
+            let correction = (U1024::ZERO - n) % n;
+            result = (sum % n + correction) % n;
+        } else {
+            result = sum % n;
+        }
     }
 
     Ok(result)

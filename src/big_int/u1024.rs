@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::fmt;
-use std::ops::{Add, BitXor, Div, Mul, Rem, Sub};
+use std::ops::{Add, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
 
 #[cfg(feature = "gmp")]
 use libc::c_long;
@@ -873,7 +873,10 @@ impl U1024 {
 
         if hi_reduced_hi != Self::ZERO {
             // Fallback for very small moduli
-            return (hi_reduced_lo % *modulus) + (lo % *modulus);
+            let term1 = hi_reduced_lo % *modulus;
+            let term2 = lo % *modulus;
+            let sum = term1 + term2;
+            return sum % *modulus;
         }
 
         let sum = lo + hi_reduced_lo;
@@ -947,20 +950,10 @@ impl U1024 {
 
     /// Helper: compute 2^1024 mod m.
     fn pow2_1024_mod(m: &Self) -> Self {
-        let mut result = Self::from_u64(2);
-
-        for _ in 0..10 {
-            let (lo, hi) = result.const_mul(&result);
-            if hi == Self::ZERO {
-                result = lo % *m;
-            } else {
-                let r_prev = result % *m;
-                let (hi_contrib_lo, _) = r_prev.const_mul(&hi);
-                result = (lo + hi_contrib_lo) % *m;
-            }
-        }
-
-        result
+        // 2^1024 mod m is equivalent to (2^1024 - m) mod m.
+        // In U1024 arithmetic, 0 - m wraps to 2^1024 - m.
+        // So we just compute (0 - m) % m.
+        (Self::ZERO - *m) % *m
     }
 }
 
@@ -1046,6 +1039,20 @@ impl Rem for U1024 {
     type Output = Self;
     fn rem(self, rhs: Self) -> Self {
         self.checked_rem(&rhs)
+    }
+}
+
+impl Shl<usize> for U1024 {
+    type Output = Self;
+    fn shl(self, rhs: usize) -> Self {
+        U1024::shl(&self, rhs)
+    }
+}
+
+impl Shr<usize> for U1024 {
+    type Output = Self;
+    fn shr(self, rhs: usize) -> Self {
+        U1024::shr(&self, rhs)
     }
 }
 

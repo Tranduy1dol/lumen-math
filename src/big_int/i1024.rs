@@ -150,13 +150,17 @@ impl I1024 {
     ///
     /// This is a specialized operation used in the Extended Euclidean Algorithm.
     ///
-    /// # Arguments
+    /// # Panics
     ///
-    /// * `quotient` - An unsigned quotient value
-    /// * `other` - The value to multiply by quotient and subtract
-    pub fn sub_mul(&self, quotient: &U1024, other: &I1024) -> Self {
+    /// Panics if `quotient * other` exceeds 1024 bits (overflow).
+    /// This method is intended solely for internal protocol usage where bounds are known.
+    pub(crate) fn sub_mul(&self, quotient: &U1024, other: &I1024) -> Self {
         // Compute quotient * other.magnitude
-        let (prod_lo, _prod_hi) = quotient.const_mul(&other.magnitude);
+        let (prod_lo, prod_hi) = quotient.const_mul(&other.magnitude);
+
+        if prod_hi != U1024::ZERO {
+            panic!("sub_mul: multiplication overflowed 1024 bits");
+        }
 
         // Sign of quotient * other is same as other.positive (quotient is always positive)
         let prod_positive = other.positive;
@@ -171,6 +175,9 @@ impl I1024 {
             }
         } else {
             // Different signs: add magnitudes, keep sign of self
+            // Note: This addition can conceptually overflow I1024 if result > 2^1024,
+            // but we perform wrapping addition on U1024 magnitudes here.
+            // In the context of Extended GCD, intermediate values shouldn't exceed bounds unexpectedly.
             Self::new(self.magnitude + prod_lo, self.positive)
         }
     }
@@ -422,5 +429,19 @@ mod tests {
         assert!(!format!("{}", a).contains('-'));
         assert!(format!("{}", b).contains('-'));
         assert!(!format!("{}", z).contains('-'));
+    }
+
+    #[test]
+    #[should_panic(expected = "sub_mul: multiplication overflowed 1024 bits")]
+    fn test_i1024_sub_mul_overflow() {
+        // Construct MAX manually since it's not a const on U1024
+        let max_digits = [u64::MAX; 16];
+        let large = U1024(max_digits);
+
+        // 2 * MAX will definitely overflow 1024 bits
+        let other = I1024::from_u64(2);
+        let base = I1024::from_u64(1);
+
+        base.sub_mul(&large, &other);
     }
 }
