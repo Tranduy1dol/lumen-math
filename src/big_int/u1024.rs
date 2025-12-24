@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::fmt;
-use std::ops::{Add, BitXor, Mul, Sub};
+use std::ops::{Add, BitXor, Div, Mul, Rem, Shl, Shr, Sub};
 
 #[cfg(feature = "gmp")]
 use libc::c_long;
@@ -599,16 +599,149 @@ impl U1024 {
         native::mul(self, rhs)
     }
 
-    pub fn div_rem(&self, _modulus: &Self) -> (Self, Self) {
+    /// Left shift by `n` bits.
+    ///
+    /// If `n >= 1024`, returns zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mathlib::U1024;
+    ///
+    /// let v = U1024::from_u64(1);
+    /// let shifted = v.shl(10);
+    /// assert_eq!(shifted.0[0], 1024); // 2^10
+    /// ```
+    pub fn shl(&self, n: usize) -> Self {
+        if n >= 1024 {
+            return Self::ZERO;
+        }
+
+        if n == 0 {
+            return *self;
+        }
+
+        let limb_shift = n / 64;
+        let bit_shift = n % 64;
+
+        let mut result = [0u64; LIMBS];
+
+        if bit_shift == 0 {
+            // Simple limb-only shift
+            result[limb_shift..LIMBS].copy_from_slice(&self.0[..(LIMBS - limb_shift)]);
+        } else {
+            // Need to handle bit carry between limbs
+            for (i, result_limb) in result.iter_mut().enumerate().skip(limb_shift) {
+                let src_idx = i - limb_shift;
+                *result_limb = self.0[src_idx] << bit_shift;
+                if src_idx > 0 {
+                    *result_limb |= self.0[src_idx - 1] >> (64 - bit_shift);
+                }
+            }
+        }
+
+        Self(result)
+    }
+
+    /// Right shift by `n` bits.
+    ///
+    /// If `n >= 1024`, returns zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mathlib::U1024;
+    ///
+    /// let v = U1024::from_u64(1024);
+    /// let shifted = v.shr(10);
+    /// assert_eq!(shifted.0[0], 1); // 1024 / 2^10 = 1
+    /// ```
+    pub fn shr(&self, n: usize) -> Self {
+        if n >= 1024 {
+            return Self::ZERO;
+        }
+
+        if n == 0 {
+            return *self;
+        }
+
+        let limb_shift = n / 64;
+        let bit_shift = n % 64;
+
+        let mut result = [0u64; LIMBS];
+
+        if bit_shift == 0 {
+            // Simple limb-only shift
+            result[..(LIMBS - limb_shift)].copy_from_slice(&self.0[limb_shift..LIMBS]);
+        } else {
+            // Need to handle bit carry between limbs
+            for (i, result_limb) in result.iter_mut().enumerate().take(LIMBS - limb_shift) {
+                let src_idx = i + limb_shift;
+                *result_limb = self.0[src_idx] >> bit_shift;
+                if src_idx + 1 < LIMBS {
+                    *result_limb |= self.0[src_idx + 1] << (64 - bit_shift);
+                }
+            }
+        }
+
+        Self(result)
+    }
+
+    /// Returns a new U1024 with the specified bit set to 1.
+    ///
+    /// If `index >= 1024`, returns self unchanged.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mathlib::U1024;
+    ///
+    /// let v = U1024::ZERO;
+    /// let with_bit = v.with_bit(10);
+    /// assert_eq!(with_bit.0[0], 1024); // 2^10
+    /// ```
+    pub fn with_bit(&self, index: usize) -> Self {
+        if index >= 1024 {
+            return *self;
+        }
+
+        let limb_idx = index / 64;
+        let bit_idx = index % 64;
+
+        let mut result = self.0;
+        result[limb_idx] |= 1u64 << bit_idx;
+
+        Self(result)
+    }
+
+    /// Division with remainder: returns (quotient, remainder) such that
+    /// `self = quotient * divisor + remainder`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `divisor` is zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mathlib::U1024;
+    ///
+    /// let a = U1024::from_u64(100);
+    /// let b = U1024::from_u64(7);
+    /// let (q, r) = a.div_rem(&b);
+    /// assert_eq!(q, U1024::from_u64(14)); // 100 / 7 = 14
+    /// assert_eq!(r, U1024::from_u64(2));  // 100 % 7 = 2
+    /// ```
+    pub fn div_rem(&self, divisor: &Self) -> (Self, Self) {
         #[cfg(feature = "gmp")]
         {
             let mut dn = LIMBS;
-            while dn > 0 && _modulus.0[dn - 1] == 0 {
+            while dn > 0 && divisor.0[dn - 1] == 0 {
                 dn -= 1;
             }
 
             if dn == 0 {
-                panic!("Division by zero in U1024::div_rem");
+                panic!("Division by zero");
             }
 
             let mut nn = LIMBS;
@@ -634,7 +767,7 @@ impl U1024 {
                     0,
                     self.0.as_ptr(),
                     nn as c_long,
-                    _modulus.0.as_ptr(),
+                    divisor.0.as_ptr(),
                     dn as c_long,
                 );
             }
@@ -642,7 +775,185 @@ impl U1024 {
         }
 
         #[cfg(not(feature = "gmp"))]
-        unimplemented!("U1024::div_rem requires the gmp feature");
+        {
+            if *divisor == Self::ZERO {
+                panic!("Division by zero");
+            }
+
+            if *self < *divisor {
+                return (Self::ZERO, *self);
+            }
+
+            if *self == *divisor {
+                return (Self::from_u64(1), Self::ZERO);
+            }
+
+            // Binary long division
+            let mut quotient = Self::ZERO;
+            let mut remainder = Self::ZERO;
+
+            let a_bits = self.bits();
+
+            for i in (0..a_bits).rev() {
+                // Left shift remainder by 1
+                remainder = remainder.shl(1);
+
+                // Set the least significant bit of remainder to bit i of self
+                if self.bit(i) {
+                    remainder = remainder + Self::from_u64(1);
+                }
+
+                // If remainder >= divisor, subtract divisor and set quotient bit
+                if remainder >= *divisor {
+                    remainder = remainder - *divisor;
+                    quotient = quotient.with_bit(i);
+                }
+            }
+
+            (quotient, remainder)
+        }
+    }
+
+    /// Returns the quotient of `self / divisor`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `divisor` is zero.
+    #[inline]
+    pub fn checked_div(&self, divisor: &Self) -> Self {
+        self.div_rem(divisor).0
+    }
+
+    /// Returns the remainder of `self % divisor`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `divisor` is zero.
+    #[inline]
+    pub fn checked_rem(&self, divisor: &Self) -> Self {
+        self.div_rem(divisor).1
+    }
+
+    /// Modular multiplication: computes (self * other) mod modulus.
+    ///
+    /// Handles the case where the product exceeds 1024 bits by properly
+    /// reducing the 2048-bit intermediate result.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `modulus` is zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mathlib::U1024;
+    ///
+    /// let a = U1024::from_u64(123);
+    /// let b = U1024::from_u64(456);
+    /// let m = U1024::from_u64(1000);
+    /// let result = a.mod_mul(&b, &m);
+    /// assert_eq!(result, U1024::from_u64((123 * 456) % 1000));
+    /// ```
+    pub fn mod_mul(&self, other: &Self, modulus: &Self) -> Self {
+        if *modulus == Self::ZERO {
+            panic!("Modulus cannot be zero");
+        }
+
+        let (lo, hi) = self.const_mul(other);
+
+        // If hi is zero, we can just reduce lo
+        if hi == Self::ZERO {
+            return lo % *modulus;
+        }
+
+        // For a full 2048-bit product, we need to reduce properly
+        // We use: (2^1024 * hi + lo) mod m = ((2^1024 mod m) * hi + lo) mod m
+        let r = Self::pow2_1024_mod(modulus);
+        let (hi_reduced_lo, hi_reduced_hi) = r.const_mul(&hi);
+
+        if hi_reduced_hi != Self::ZERO {
+            // Fallback for very small moduli
+            let term1 = hi_reduced_lo % *modulus;
+            let term2 = lo % *modulus;
+            let sum = term1 + term2;
+            return sum % *modulus;
+        }
+
+        let sum = lo + hi_reduced_lo;
+        if sum < lo {
+            // Overflow: add 2^1024 mod m
+            let overflow_contrib = r % *modulus;
+            let partial = sum % *modulus;
+            return (partial + overflow_contrib) % *modulus;
+        }
+
+        sum % *modulus
+    }
+
+    /// Modular exponentiation: computes self^exp mod modulus.
+    ///
+    /// Uses the square-and-multiply (binary exponentiation) algorithm.
+    /// Time complexity: O(log exp) multiplications.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `modulus` is zero.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use mathlib::U1024;
+    ///
+    /// let base = U1024::from_u64(2);
+    /// let exp = U1024::from_u64(10);
+    /// let modulus = U1024::from_u64(1000);
+    ///
+    /// // 2^10 mod 1000 = 1024 mod 1000 = 24
+    /// let result = base.mod_pow(&exp, &modulus);
+    /// assert_eq!(result, U1024::from_u64(24));
+    /// ```
+    pub fn mod_pow(&self, exp: &Self, modulus: &Self) -> Self {
+        if *modulus == Self::ZERO {
+            panic!("Modulus cannot be zero");
+        }
+
+        if *modulus == Self::from_u64(1) {
+            return Self::ZERO;
+        }
+
+        let mut result = Self::from_u64(1);
+        let mut base = *self % *modulus;
+
+        // Process each bit of the exponent
+        for i in 0..16 {
+            let mut limb = exp.0[i];
+            for _ in 0..64 {
+                if (limb & 1) == 1 {
+                    result = result.mod_mul(&base, modulus);
+                }
+                base = base.mod_mul(&base, modulus);
+                limb >>= 1;
+            }
+        }
+
+        result
+    }
+
+    /// Alias for mod_pow - Cyclic Group Exponentiation.
+    ///
+    /// Traditional name for modular exponentiation in group theory contexts:
+    /// computes g^x mod n.
+    #[inline]
+    pub fn cge(&self, exponent: &Self, modulus: &Self) -> Self {
+        self.mod_pow(exponent, modulus)
+    }
+
+    /// Helper: compute 2^1024 mod m.
+    fn pow2_1024_mod(m: &Self) -> Self {
+        // 2^1024 mod m is equivalent to (2^1024 - m) mod m.
+        // In U1024 arithmetic, 0 - m wraps to 2^1024 - m.
+        // So we just compute (0 - m) % m.
+        (Self::ZERO - *m) % *m
     }
 }
 
@@ -714,6 +1025,34 @@ impl Mul for U1024 {
     fn mul(self, rhs: Self) -> Self {
         let (low, _) = self.full_mul(&rhs);
         low
+    }
+}
+
+impl Div for U1024 {
+    type Output = Self;
+    fn div(self, rhs: Self) -> Self {
+        self.checked_div(&rhs)
+    }
+}
+
+impl Rem for U1024 {
+    type Output = Self;
+    fn rem(self, rhs: Self) -> Self {
+        self.checked_rem(&rhs)
+    }
+}
+
+impl Shl<usize> for U1024 {
+    type Output = Self;
+    fn shl(self, rhs: usize) -> Self {
+        U1024::shl(&self, rhs)
+    }
+}
+
+impl Shr<usize> for U1024 {
+    type Output = Self;
+    fn shr(self, rhs: usize) -> Self {
+        U1024::shr(&self, rhs)
     }
 }
 
@@ -813,4 +1152,90 @@ impl Ord for U1024 {
         }
         Ordering::Equal
     }
+}
+
+// Digest implementation
+use crate::traits::Digest;
+use sha2::{Digest as Sha2Digest, Sha256};
+
+impl Digest for U1024 {
+    fn from_hash(input: &[u8]) -> Self {
+        let expanded = expand_message_sha256(input, 128);
+        Self::from_be_bytes(&expanded)
+    }
+
+    fn from_hash_with_domain(domain: &[u8], input: &[u8]) -> Self {
+        // Concatenate domain separator with length prefix
+        let mut data = Vec::with_capacity(domain.len() + input.len() + 8);
+        data.extend_from_slice(&(domain.len() as u64).to_be_bytes());
+        data.extend_from_slice(domain);
+        data.extend_from_slice(input);
+
+        Self::from_hash(&data)
+    }
+}
+
+/// Expands a message to the specified length using SHA256 (RFC 9380 style).
+fn expand_message_sha256(input: &[u8], len_in_bytes: usize) -> Vec<u8> {
+    const DST: &[u8] = b"mathlib_expand_v1";
+    const HASH_LEN: usize = 32;
+
+    let ell = len_in_bytes.div_ceil(HASH_LEN);
+
+    let dst_prime = {
+        let mut d = Vec::with_capacity(DST.len() + 1);
+        d.extend_from_slice(DST);
+        d.push(DST.len() as u8);
+        d
+    };
+
+    let msg_prime = {
+        let mut m = Vec::with_capacity(64 + input.len() + 2 + 1 + dst_prime.len());
+        m.extend_from_slice(&[0u8; 64]);
+        m.extend_from_slice(input);
+        m.extend_from_slice(&(len_in_bytes as u16).to_be_bytes());
+        m.push(0u8);
+        m.extend_from_slice(&dst_prime);
+        m
+    };
+
+    let b_0 = {
+        let mut hasher = Sha256::new();
+        hasher.update(&msg_prime);
+        hasher.finalize()
+    };
+
+    let mut b_vals = Vec::with_capacity(ell);
+    let b_1 = {
+        let mut hasher = Sha256::new();
+        hasher.update(b_0.as_slice());
+        hasher.update([0x01]);
+        hasher.update(&dst_prime);
+        hasher.finalize()
+    };
+    b_vals.push(b_1);
+
+    for i in 2..=ell {
+        let prev = &b_vals[i - 2];
+        let mut xored = [0u8; HASH_LEN];
+        for j in 0..HASH_LEN {
+            xored[j] = b_0[j] ^ prev[j];
+        }
+
+        let mut hasher = Sha256::new();
+        hasher.update(xored);
+        hasher.update([i as u8]);
+        hasher.update(&dst_prime);
+        b_vals.push(hasher.finalize());
+    }
+
+    let mut result = Vec::with_capacity(len_in_bytes);
+    for b in b_vals {
+        result.extend_from_slice(&b);
+        if result.len() >= len_in_bytes {
+            break;
+        }
+    }
+    result.truncate(len_in_bytes);
+    result
 }

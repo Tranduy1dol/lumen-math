@@ -1,19 +1,36 @@
+//! Mathlib - A cryptographic mathematics library.
+//!
+//! This library provides fundamental building blocks for cryptographic applications:
+//!
+//! - **Big Integers**: `U1024` (unsigned) and `I1024` (signed) 1024-bit integers
+//! - **Field Arithmetic**: `FieldElement` with Montgomery multiplication
+//! - **Polynomials**: Univariate and multivariate polynomial operations
+//! - **Protocols**: GCD, CRT, and other cryptographic protocols
+//! - **Traits**: `BigInt`, `Digest` for common operations
+
 pub mod big_int;
 pub mod field;
 pub mod poly;
+pub mod protocol;
 pub mod traits;
 
 pub use mathlib_macros::FieldConfig;
 
-pub use crate::big_int::{backend::*, u1024::U1024};
+// Big integers
+pub use crate::big_int::{I1024, U1024, backend::*};
+
+// Field operations
 pub use crate::field::{
     config::{DefaultFieldConfig, FieldConfig},
     element::FieldElement,
     montgomery::MontgomeryContext,
 };
+
+// Polynomials
 pub use crate::poly::{multivariate::MultivariatePolynomial, ntt::*, univariate::Polynomial};
 
-pub use traits::*;
+// Traits
+pub use traits::{BigInt, Digest};
 
 /// Computes N' for Montgomery reduction where P * N' = -1 mod 2^1024.
 ///
