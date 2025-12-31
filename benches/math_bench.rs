@@ -1,7 +1,7 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
-use mathlib::U1024;
-use mathlib::big_int::backend::native;
+use lumen_math::U1024;
+use lumen_math::big_int::backend::native;
 
 fn bench_add(c: &mut Criterion) {
     let a = U1024([

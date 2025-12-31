@@ -1,5 +1,5 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use mathlib::{DefaultFieldConfig, FieldElement, Polynomial};
+use lumen_math::{DefaultFieldConfig, FieldElement, Polynomial};
 
 fn bench_poly_mul(c: &mut Criterion) {
     let size = 256;
