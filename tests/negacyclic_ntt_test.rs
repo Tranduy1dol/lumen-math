@@ -57,7 +57,7 @@ fn test_ntt_context_mul() {
 
     // (1 + x)^2 = 1 + 2x + x^2 in standard ring
     // In negacyclic ring X^N = -1, so result depends on reduction
-    let result = ctx.mul(&mut a, &mut b);
+    let result = ctx.mul(&a, &b);
 
     // Should get some polynomial back with correct length
     assert_eq!(result.len(), 8);
