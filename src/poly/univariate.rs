@@ -1,10 +1,10 @@
 //! Univariate polynomial with enhanced operations for ZK applications.
 //!
-//! Provides comprehensive polynomial operations including:
+//! Provides comprehensive polynomial operations including
 //! - Basic arithmetic (add, sub, mul, div, mod)
 //! - Evaluation and interpolation
 //! - Composition and derivative
-//! - Division with remainder (zerofier)
+//! - Division with the remainder (zerofier)
 
 use std::fmt;
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
@@ -134,7 +134,7 @@ impl<C: FieldConfig> Polynomial<C> {
         self.evaluate(root)
     }
 
-    /// Polynomial division with remainder.
+    /// Polynomial division with the remainder.
     /// Returns (quotient, remainder) such that self = quotient * divisor + remainder.
     pub fn divide_with_remainder(&self, divisor: &Self) -> (Self, Self) {
         if divisor.is_zero() {
@@ -184,10 +184,12 @@ impl<C: FieldConfig> Polynomial<C> {
 
         let zero = FieldElement::zero();
 
-        let mut a_coeffs = self.coeffs.clone();
+        let mut a_coeffs = Vec::with_capacity(size);
+        a_coeffs.extend_from_slice(&self.coeffs);
         a_coeffs.resize(size, zero);
 
-        let mut b_coeffs = other.coeffs.clone();
+        let mut b_coeffs = Vec::with_capacity(size);
+        b_coeffs.extend_from_slice(&other.coeffs);
         b_coeffs.resize(size, zero);
 
         ntt(&mut a_coeffs);
@@ -223,7 +225,7 @@ impl<C: FieldConfig> Polynomial<C> {
         }
 
         let mut new_coeffs = vec![FieldElement::zero(); n];
-        new_coeffs.extend(self.coeffs.clone());
+        new_coeffs.extend_from_slice(&self.coeffs);
         Self::new(new_coeffs)
     }
 
@@ -292,14 +294,19 @@ impl<C: FieldConfig> Polynomial<C> {
 
         let mut result = Self::constant(*self.coeffs.last().unwrap());
         for i in (0..self.coeffs.len() - 1).rev() {
-            result = result * other.clone() + Self::constant(self.coeffs[i]);
+            result = result * other + Self::constant(self.coeffs[i]);
         }
         result
     }
 
-    /// Returns the polynomial as coefficient vector.
-    pub fn to_vec(&self) -> Vec<FieldElement<C>> {
-        self.coeffs.clone()
+    /// Returns the polynomial coefficients as a slice.
+    pub fn as_slice(&self) -> &[FieldElement<C>] {
+        &self.coeffs
+    }
+
+    /// Consumes the polynomial and returns the coefficient vector.
+    pub fn into_vec(self) -> Vec<FieldElement<C>> {
+        self.coeffs
     }
 }
 
@@ -350,13 +357,21 @@ impl<C: FieldConfig> Mul for Polynomial<C> {
     type Output = Self;
 
     fn mul(self, rhs: Self) -> Self {
+        self * &rhs
+    }
+}
+
+impl<'a, C: FieldConfig> Mul<&'a Polynomial<C>> for Polynomial<C> {
+    type Output = Polynomial<C>;
+
+    fn mul(self, rhs: &'a Polynomial<C>) -> Polynomial<C> {
         if self.is_zero() || rhs.is_zero() {
             return Self::zero();
         }
 
         // Use NTT for large polynomials
         if self.coeffs.len() + rhs.coeffs.len() > 64 {
-            return self.mul_ntt(&rhs);
+            return self.mul_ntt(rhs);
         }
 
         let len = self.coeffs.len() + rhs.coeffs.len() - 1;
