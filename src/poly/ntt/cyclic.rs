@@ -29,8 +29,11 @@ pub fn ntt<C: FieldConfig>(coeffs: &mut [FieldElement<C>]) {
     while len <= n {
         let half_len = len / 2;
 
+        // Compute twiddle factor ω^(n/len) for this layer.
+        // Starting from ROOT_OF_UNITY (Nth root), we square it (log2(n) - log2(len)) times.
+        let log_n = (n as u32).trailing_zeros();
         let log_len = len.trailing_zeros();
-        let factor = 32 - log_len;
+        let factor = log_n - log_len;
 
         let mut w_len = FieldElement::<C>::new(C::ROOT_OF_UNITY);
         for _ in 0..factor {

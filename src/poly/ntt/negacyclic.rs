@@ -49,8 +49,11 @@ pub fn ntt_negacyclic<C: FieldConfig>(coeffs: &mut [FieldElement<C>]) {
 
         // Compute ω for current layer
         // ω = ψ^2 is the primitive Nth root of unity
+        // We need ω^(n/len) as the twiddle factor for this layer.
+        // Starting from ω (Nth root), we square it (log2(n) - log2(len)) times.
+        let log_n = (n as u32).trailing_zeros();
         let log_len = len.trailing_zeros();
-        let factor = 32 - log_len;
+        let factor = log_n - log_len;
 
         let omega_base = FieldElement::<C>::new(C::PRIMITIVE_2NTH_ROOT);
         let mut w_len = omega_base * omega_base; // ψ^2 = ω (Nth root)
@@ -88,8 +91,11 @@ pub fn intt_negacyclic<C: FieldConfig>(coeffs: &mut [FieldElement<C>]) {
     while len >= 2 {
         let half_len = len / 2;
 
+        // Compute inverse twiddle factor for this layer.
+        // We need ω^(-n/len), computed by squaring ω^(-1) factor times.
+        let log_n = (n as u32).trailing_zeros();
         let log_len = len.trailing_zeros();
-        let factor = 32 - log_len;
+        let factor = log_n - log_len;
 
         let omega_base = FieldElement::<C>::new(C::PRIMITIVE_2NTH_ROOT);
         let omega = omega_base * omega_base;

@@ -5,25 +5,35 @@
 //! - **Cyclic NTT**: Standard NTT over Zq[X]/(X^N - 1)
 //! - **Negacyclic NTT**: NTT over Zq[X]/(X^N + 1) for lattice-based crypto
 //!
-//! # Usage
+//! # Small-Modulus Field Types (Recommended for Production)
+//!
+//! For Kyber and Dilithium, use the optimized small-field types in [`small`]:
 //!
 //! ```rust,ignore
-//! use lumen_math::poly::ntt::{ntt, intt, ntt_negacyclic, intt_negacyclic, NttContext};
-//! use lumen_math::poly::ntt::config::KyberFieldConfig;
+//! use lumen_math::poly::ntt::small::{KyberFieldElement, DilithiumFieldElement};
 //!
-//! // Standard NTT
-//! ntt(&mut coeffs);
-//! intt(&mut coeffs);
+//! // Efficient native arithmetic with Barrett reduction
+//! let a = KyberFieldElement::new(100);
+//! let b = KyberFieldElement::new(200);
+//! let c = a * b;  // Uses u16 arithmetic, not U1024!
+//! ```
 //!
-//! // Negacyclic NTT for Kyber
-//! let ctx = NttContext::<KyberFieldConfig>::new(256);
-//! ctx.ntt(&mut coeffs);
-//! ctx.intt(&mut coeffs);
+//! # Generic NTT (for large moduli)
+//!
+//! For large moduli (>64 bits), use the generic `FieldConfig`-based NTT:
+//!
+//! ```rust,ignore
+//! use lumen_math::poly::ntt::{ntt, intt, NttContext};
+//! use lumen_math::DefaultFieldConfig;
+//!
+//! ntt::<DefaultFieldConfig>(&mut coeffs);
+//! intt::<DefaultFieldConfig>(&mut coeffs);
 //! ```
 
 pub mod config;
 pub mod cyclic;
 pub mod negacyclic;
+pub mod small;
 
 // Re-export cyclic NTT functions for backward compatibility
 pub use cyclic::{bit_reverse, intt, ntt};
@@ -31,7 +41,8 @@ pub use cyclic::{bit_reverse, intt, ntt};
 // Re-export negacyclic NTT functions
 pub use negacyclic::{intt_negacyclic, mul_negacyclic, ntt_negacyclic};
 
-// Re-export lattice field configs
+// Re-export lattice field configs (deprecated, use small module instead)
+#[allow(deprecated)]
 pub use config::{DilithiumFieldConfig, KyberFieldConfig};
 
 use crate::{FieldConfig, FieldElement, U1024};
@@ -127,8 +138,11 @@ impl<C: FieldConfig> NttContext<C> {
         while len <= self.n {
             let half_len = len / 2;
 
+            // Compute twiddle factor ω^(n/len) for this layer.
+            // Starting from ω = ψ² (Nth root), we square it (log2(n) - log2(len)) times.
+            let log_n = (self.n as u32).trailing_zeros();
             let log_len = len.trailing_zeros();
-            let factor = 32 - log_len;
+            let factor = log_n - log_len;
 
             // ω = ψ^2, then raised to appropriate power for this layer
             let omega_base = FieldElement::<C>::new(C::PRIMITIVE_2NTH_ROOT);
@@ -167,8 +181,10 @@ impl<C: FieldConfig> NttContext<C> {
         while len >= 2 {
             let half_len = len / 2;
 
+            // Compute inverse twiddle factor ω^(-n/len) for this layer.
+            let log_n = (self.n as u32).trailing_zeros();
             let log_len = len.trailing_zeros();
-            let factor = 32 - log_len;
+            let factor = log_n - log_len;
 
             let omega_base = FieldElement::<C>::new(C::PRIMITIVE_2NTH_ROOT);
             let omega = omega_base * omega_base;
