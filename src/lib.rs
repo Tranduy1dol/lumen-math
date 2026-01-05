@@ -29,6 +29,19 @@ pub use crate::field::{
 // Polynomials
 pub use crate::poly::{multivariate::MultivariatePolynomial, ntt::*, univariate::Polynomial};
 
+// Lattice-specific configs (deprecated - use small module types instead)
+#[allow(deprecated)]
+pub use crate::poly::ntt::config::{DilithiumFieldConfig, KyberFieldConfig};
+
+// Small-modulus field types for Kyber/Dilithium (recommended for production)
+pub use crate::poly::ntt::small::{
+    DILITHIUM_OMEGA, DILITHIUM_PSI, DILITHIUM_Q, DilithiumFieldElement, KYBER_Q, KYBER_ZETA,
+    KyberFieldElement,
+};
+
+// Negacyclic NTT (explicit re-export for convenience)
+pub use crate::poly::ntt::{NttContext, intt_negacyclic, mul_negacyclic, ntt_negacyclic};
+
 // Traits
 pub use traits::{BigInt, Digest};
 

@@ -1,3 +1,8 @@
+//! Cyclic NTT (Number Theoretic Transform) over Zq[X]/(X^N - 1).
+//!
+//! This module provides the standard cyclic NTT for polynomial multiplication
+//! in the ring Zq[X]/(X^N - 1).
+
 use crate::{FieldConfig, FieldElement, U1024};
 
 /// Reorders coefficients in bit-reversal permutation order.
@@ -24,6 +29,9 @@ pub fn ntt<C: FieldConfig>(coeffs: &mut [FieldElement<C>]) {
     while len <= n {
         let half_len = len / 2;
 
+        // Compute twiddle factor ω^(2^32/len) for this layer.
+        // ROOT_OF_UNITY is a primitive 2^32-th root of unity, so we square it
+        // (32 - log2(len)) times to get the proper twiddle factor for length len.
         let log_len = len.trailing_zeros();
         let factor = 32 - log_len;
 
@@ -57,9 +65,6 @@ pub fn intt<C: FieldConfig>(coeffs: &mut [FieldElement<C>]) {
 
     coeffs[1..].reverse();
 
-    // Use U1024::from_u64 directly if possible, or construct via array
-    // U1024::from_u64 is available as inherent methods on U1024 if implemented or via macro?
-    // u1024!(...) works but is it const? No need for const here.
     let n_val = U1024::from_u64(n as u64);
     let n_elem = FieldElement::<C>::new(n_val);
     let n_inv = n_elem.inv();
