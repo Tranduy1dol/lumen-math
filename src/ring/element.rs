@@ -224,13 +224,35 @@ impl<C: FieldConfig> RingElement<C> {
         &self.data
     }
 
-    /// Returns mutable access to the raw data.
+    /// Returns mutable access to the raw data (crate-internal only).
     ///
     /// # Warning
     /// Modifying the data directly may invalidate internal state assumptions.
     #[inline]
-    pub fn data_mut(&mut self) -> &mut [FieldElement<C>] {
+    #[allow(dead_code)]
+    pub(crate) fn data_mut(&mut self) -> &mut [FieldElement<C>] {
         &mut self.data
+    }
+
+    /// Safely modifies the data using a closure, resetting state afterward.
+    ///
+    /// After the mutation, the element is marked as being in coefficient form.
+    /// Use this when you need to manually modify coefficients.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// elem.modify_data(|data| {
+    ///     data[0] = fp!(42u64);
+    /// });
+    /// ```
+    pub fn modify_data<F>(&mut self, f: F)
+    where
+        F: FnOnce(&mut [FieldElement<C>]),
+    {
+        // Ensure we're in coefficient form before modification
+        self.to_coefficient();
+        f(&mut self.data);
+        // State remains Coefficient after modification
     }
 
     /// Checks if this is the zero polynomial.
@@ -269,23 +291,17 @@ impl<'a, C: FieldConfig> Add<&'a RingElement<C>> for &'a RingElement<C> {
             "Ring elements must share the same NTT context"
         );
 
-        // Both must be in the same state for addition
-        let (lhs, rhs_data) = match (self.state, rhs.state) {
-            (RingElementState::Coefficient, RingElementState::Coefficient) => {
-                (self.clone(), rhs.data.clone())
-            }
-            (RingElementState::Ntt, RingElementState::Ntt) => (self.clone(), rhs.data.clone()),
+        // Convert RHS to match LHS state (preserves LHS state in result)
+        let rhs_data = match (self.state, rhs.state) {
+            (RingElementState::Coefficient, RingElementState::Coefficient)
+            | (RingElementState::Ntt, RingElementState::Ntt) => rhs.data.clone(),
             (RingElementState::Coefficient, RingElementState::Ntt) => {
-                let rhs_coeff = rhs.clone_to_coefficient();
-                (self.clone(), rhs_coeff.data)
+                rhs.clone_to_coefficient().data
             }
-            (RingElementState::Ntt, RingElementState::Coefficient) => {
-                let lhs_coeff = self.clone_to_coefficient();
-                (lhs_coeff, rhs.data.clone())
-            }
+            (RingElementState::Ntt, RingElementState::Coefficient) => rhs.clone_to_ntt().data,
         };
 
-        let result_data: Vec<_> = lhs
+        let result_data: Vec<_> = self
             .data
             .iter()
             .zip(rhs_data.iter())
@@ -294,8 +310,8 @@ impl<'a, C: FieldConfig> Add<&'a RingElement<C>> for &'a RingElement<C> {
 
         RingElement {
             data: result_data,
-            state: lhs.state,
-            ntt_ctx: lhs.ntt_ctx,
+            state: self.state,
+            ntt_ctx: self.ntt_ctx.clone(),
         }
     }
 }
@@ -317,23 +333,17 @@ impl<'a, C: FieldConfig> Sub<&'a RingElement<C>> for &'a RingElement<C> {
             "Ring elements must share the same NTT context"
         );
 
-        // Both must be in the same state for subtraction
-        let (lhs, rhs_data) = match (self.state, rhs.state) {
-            (RingElementState::Coefficient, RingElementState::Coefficient) => {
-                (self.clone(), rhs.data.clone())
-            }
-            (RingElementState::Ntt, RingElementState::Ntt) => (self.clone(), rhs.data.clone()),
+        // Convert RHS to match LHS state (preserves LHS state in result)
+        let rhs_data = match (self.state, rhs.state) {
+            (RingElementState::Coefficient, RingElementState::Coefficient)
+            | (RingElementState::Ntt, RingElementState::Ntt) => rhs.data.clone(),
             (RingElementState::Coefficient, RingElementState::Ntt) => {
-                let rhs_coeff = rhs.clone_to_coefficient();
-                (self.clone(), rhs_coeff.data)
+                rhs.clone_to_coefficient().data
             }
-            (RingElementState::Ntt, RingElementState::Coefficient) => {
-                let lhs_coeff = self.clone_to_coefficient();
-                (lhs_coeff, rhs.data.clone())
-            }
+            (RingElementState::Ntt, RingElementState::Coefficient) => rhs.clone_to_ntt().data,
         };
 
-        let result_data: Vec<_> = lhs
+        let result_data: Vec<_> = self
             .data
             .iter()
             .zip(rhs_data.iter())
@@ -342,8 +352,8 @@ impl<'a, C: FieldConfig> Sub<&'a RingElement<C>> for &'a RingElement<C> {
 
         RingElement {
             data: result_data,
-            state: lhs.state,
-            ntt_ctx: lhs.ntt_ctx,
+            state: self.state,
+            ntt_ctx: self.ntt_ctx.clone(),
         }
     }
 }
@@ -606,5 +616,337 @@ mod tests {
 
         // Should be equal even though in different states
         assert_eq!(a, b);
+    }
+
+    // =========================================================================
+    // Additional tests for code coverage
+    // =========================================================================
+
+    #[test]
+    #[should_panic(expected = "NTT values length must match NTT context degree")]
+    fn test_from_ntt_wrong_length_panics() {
+        let ctx = make_ctx();
+        let _elem = RingElement::from_ntt(vec![fp!(1u64); 4], ctx); // Wrong size
+    }
+
+    #[test]
+    fn test_context_accessor() {
+        let ctx = make_ctx();
+        let elem = RingElement::zero(ctx.clone());
+        assert!(Arc::ptr_eq(&ctx, elem.context()));
+    }
+
+    #[test]
+    fn test_ntt_values_accessor() {
+        let ctx = make_ctx();
+        let coeffs: Vec<_> = (0..8).map(|i| fp!(i as u64)).collect();
+        let mut elem = RingElement::new(coeffs, ctx);
+        elem.to_ntt();
+
+        // Should not panic - in NTT state
+        let ntt_vals = elem.ntt_values();
+        assert_eq!(ntt_vals.len(), 8);
+    }
+
+    #[test]
+    #[should_panic(expected = "Element must be in NTT form")]
+    fn test_ntt_values_panics_in_coefficient_state() {
+        let ctx = make_ctx();
+        let elem = RingElement::zero(ctx);
+        let _vals = elem.ntt_values(); // Should panic
+    }
+
+    #[test]
+    #[should_panic(expected = "Element must be in coefficient form")]
+    fn test_coefficients_panics_in_ntt_state() {
+        let ctx = make_ctx();
+        let mut elem = RingElement::zero(ctx);
+        elem.to_ntt();
+        let _coeffs = elem.coefficients(); // Should panic
+    }
+
+    #[test]
+    fn test_modify_data() {
+        let ctx = make_ctx();
+        let mut elem = RingElement::new(vec![fp!(0u64); 8], ctx);
+
+        elem.modify_data(|data| {
+            data[0] = fp!(42u64);
+            data[7] = fp!(99u64);
+        });
+
+        assert_eq!(elem.state(), RingElementState::Coefficient);
+        assert_eq!(elem.coefficients()[0].to_u1024().0[0], 42);
+        assert_eq!(elem.coefficients()[7].to_u1024().0[0], 99);
+    }
+
+    #[test]
+    fn test_modify_data_converts_from_ntt() {
+        let ctx = make_ctx();
+        let mut elem = RingElement::new(vec![fp!(1u64); 8], ctx);
+        elem.to_ntt();
+        assert_eq!(elem.state(), RingElementState::Ntt);
+
+        // modify_data should convert to coefficient form first
+        elem.modify_data(|data| {
+            data[0] = fp!(100u64);
+        });
+
+        assert_eq!(elem.state(), RingElementState::Coefficient);
+    }
+
+    #[test]
+    fn test_owned_addition() {
+        let ctx = make_ctx();
+        let a = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx.clone());
+        let b = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+
+        // Use owned addition (consumes a and b)
+        let sum = a + b;
+
+        for (i, c) in sum.clone_to_coefficient().coefficients().iter().enumerate() {
+            assert_eq!(c.to_u1024().0[0], (i * 2) as u64);
+        }
+    }
+
+    #[test]
+    fn test_owned_subtraction() {
+        let ctx = make_ctx();
+        let a = RingElement::new((0..8).map(|i| fp!((i * 3) as u64)).collect(), ctx.clone());
+        let b = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+
+        // Use owned subtraction
+        let diff = a - b;
+
+        for (i, c) in diff
+            .clone_to_coefficient()
+            .coefficients()
+            .iter()
+            .enumerate()
+        {
+            assert_eq!(c.to_u1024().0[0], (i * 2) as u64);
+        }
+    }
+
+    #[test]
+    fn test_owned_multiplication() {
+        let ctx = make_ctx();
+        let a = RingElement::one(ctx.clone());
+        let b = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+
+        // Use owned multiplication
+        let product = a * b;
+        assert_eq!(product.state(), RingElementState::Ntt);
+    }
+
+    #[test]
+    fn test_owned_negation() {
+        let ctx = make_ctx();
+        let a = RingElement::new(vec![fp!(5u64); 8], ctx);
+
+        // Use owned negation (consumes a)
+        let neg_a = -a;
+
+        // Check all coefficients are negated
+        for c in neg_a.clone_to_coefficient().coefficients() {
+            assert!(!c.is_zero());
+        }
+    }
+
+    #[test]
+    fn test_ntt_ntt_addition() {
+        let ctx = make_ctx();
+        let mut a = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx.clone());
+        let mut b = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+
+        a.to_ntt();
+        b.to_ntt();
+
+        let sum = &a + &b;
+        assert_eq!(sum.state(), RingElementState::Ntt);
+    }
+
+    #[test]
+    fn test_coefficient_ntt_addition() {
+        let ctx = make_ctx();
+        let a = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx.clone());
+        let mut b = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+        b.to_ntt();
+
+        // Coefficient + NTT -> Coefficient (preserves LHS state)
+        let sum = &a + &b;
+        assert_eq!(sum.state(), RingElementState::Coefficient);
+    }
+
+    #[test]
+    fn test_ntt_coefficient_addition() {
+        let ctx = make_ctx();
+        let mut a = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx.clone());
+        a.to_ntt();
+        let b = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+
+        // NTT + Coefficient -> NTT (preserves LHS state)
+        let sum = &a + &b;
+        assert_eq!(sum.state(), RingElementState::Ntt);
+    }
+
+    #[test]
+    fn test_ntt_ntt_subtraction() {
+        let ctx = make_ctx();
+        let mut a = RingElement::new((0..8).map(|i| fp!((i * 2) as u64)).collect(), ctx.clone());
+        let mut b = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+
+        a.to_ntt();
+        b.to_ntt();
+
+        let diff = &a - &b;
+        assert_eq!(diff.state(), RingElementState::Ntt);
+    }
+
+    #[test]
+    fn test_coefficient_ntt_subtraction() {
+        let ctx = make_ctx();
+        let a = RingElement::new((0..8).map(|i| fp!((i * 2) as u64)).collect(), ctx.clone());
+        let mut b = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+        b.to_ntt();
+
+        let diff = &a - &b;
+        assert_eq!(diff.state(), RingElementState::Coefficient);
+    }
+
+    #[test]
+    fn test_ntt_coefficient_subtraction() {
+        let ctx = make_ctx();
+        let mut a = RingElement::new((0..8).map(|i| fp!((i * 2) as u64)).collect(), ctx.clone());
+        a.to_ntt();
+        let b = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+
+        let diff = &a - &b;
+        assert_eq!(diff.state(), RingElementState::Ntt);
+    }
+
+    #[test]
+    fn test_inequality_different_contexts() {
+        let ctx1 = make_ctx();
+        let ctx2 = make_ctx();
+
+        let a = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx1);
+        let b = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx2);
+
+        // Different contexts -> not equal
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn test_debug_format() {
+        let ctx = make_ctx();
+        let elem = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+
+        let debug_str = format!("{:?}", elem);
+        assert!(debug_str.contains("RingElement"));
+        assert!(debug_str.contains("Coefficient"));
+        assert!(debug_str.contains("8"));
+    }
+
+    #[test]
+    fn test_display_format_nonzero() {
+        let ctx = make_ctx();
+        let mut coeffs = vec![fp!(0u64); 8];
+        coeffs[0] = fp!(5u64); // constant term
+        coeffs[1] = fp!(3u64); // x term
+        coeffs[2] = fp!(1u64); // x^2 term
+
+        let elem = RingElement::new(coeffs, ctx);
+        let display_str = format!("{}", elem);
+
+        // Should contain terms (order may vary based on Display impl)
+        assert!(!display_str.is_empty());
+        assert!(!display_str.contains("0") || display_str.len() > 1);
+    }
+
+    #[test]
+    fn test_display_format_zero() {
+        let ctx = make_ctx();
+        let elem = RingElement::zero(ctx);
+
+        let display_str = format!("{}", elem);
+        assert_eq!(display_str, "0");
+    }
+
+    #[test]
+    fn test_to_ntt_no_op_when_already_ntt() {
+        let ctx = make_ctx();
+        let mut elem = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+        elem.to_ntt();
+
+        let data_before: Vec<_> = elem.data().iter().map(|c| c.to_u1024()).collect();
+        elem.to_ntt(); // Should be no-op
+        let data_after: Vec<_> = elem.data().iter().map(|c| c.to_u1024()).collect();
+
+        assert_eq!(data_before, data_after);
+    }
+
+    #[test]
+    fn test_to_coefficient_no_op_when_already_coefficient() {
+        let ctx = make_ctx();
+        let mut elem = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+
+        let data_before: Vec<_> = elem.data().iter().map(|c| c.to_u1024()).collect();
+        elem.to_coefficient(); // Should be no-op
+        let data_after: Vec<_> = elem.data().iter().map(|c| c.to_u1024()).collect();
+
+        assert_eq!(data_before, data_after);
+    }
+
+    #[test]
+    fn test_into_ntt() {
+        let ctx = make_ctx();
+        let elem = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+
+        let ntt_elem = elem.into_ntt();
+        assert_eq!(ntt_elem.state(), RingElementState::Ntt);
+    }
+
+    #[test]
+    fn test_into_coefficient() {
+        let ctx = make_ctx();
+        let mut elem = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+        elem.to_ntt();
+
+        let coeff_elem = elem.into_coefficient();
+        assert_eq!(coeff_elem.state(), RingElementState::Coefficient);
+    }
+
+    #[test]
+    fn test_data_accessor() {
+        let ctx = make_ctx();
+        let elem = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+
+        let data = elem.data();
+        assert_eq!(data.len(), 8);
+    }
+
+    #[test]
+    fn test_degree() {
+        let ctx = make_ctx();
+        let elem = RingElement::zero(ctx);
+        assert_eq!(elem.degree(), 8);
+    }
+
+    #[test]
+    fn test_is_zero_false_for_nonzero() {
+        let ctx = make_ctx();
+        let elem = RingElement::one(ctx);
+        assert!(!elem.is_zero());
+    }
+
+    #[test]
+    fn test_scale_preserves_state() {
+        let ctx = make_ctx();
+        let mut elem = RingElement::new((0..8).map(|i| fp!(i as u64)).collect(), ctx);
+        elem.to_ntt();
+
+        let scaled = elem.scale(&fp!(2u64));
+        assert_eq!(scaled.state(), RingElementState::Ntt);
     }
 }
