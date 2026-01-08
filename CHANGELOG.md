@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-01-08
+
+### Added
+
+- **Constant-Time Cryptographic Operations**: Timing side-channel resistant implementations
+  - **`U1024::conditional_select(a, b, choice)`**: Constant-time selection using bitwise operations
+    - Native fallback uses `core::hint::black_box()` to prevent compiler optimizations
+    - AVX2 backend uses `vpblendvb` SIMD instruction
+  - **`U1024::bits()`**: Constant-time bit length calculation
+    - Iterates all limbs without early returns
+    - Uses conditional masking instead of branching
+  - **`U1024::mod_pow()`**: Constant-time modular exponentiation
+    - Always computes `result * base`, then uses `conditional_select`
+    - Fixed 1024 iterations (16 limbs × 64 bits) regardless of exponent value
+    - Protected against Hamming weight timing attacks
+  - **`U1024::div_rem()`**: Constant-time division with remainder
+    - Fixed 1024 iterations regardless of dividend size
+    - Uses `conditional_select` for quotient and remainder updates
+    - Constant-time comparison via `borrowing_sub`
+
+- **`U1024::ONE` Constant**: Added `pub const ONE` for convenience
+
+- **Comprehensive Constant-Time Tests**: `tests/constant_time_test.rs`
+  - 31 correctness tests for all constant-time operations
+  - Tests for edge cases: zero, max values, Hamming weight variations
+  - Property-based tests for `div_rem` and `bits`
+
+- **Constant-Time Benchmarks**: `benches/constant_time_bench.rs`
+  - `conditional_select`: Compares `true` vs `false` vs alternating choice
+  - `bits`: Compares zero, small, medium, large, sparse inputs
+  - `mod_pow_hamming_weight`: Critical security benchmark - compares exponents with 1, 32, 64, 128 bits set
+  - `div_rem`: Compares small, medium, large dividends
+  - `timing_leak_detection`: Sparse vs dense exponent comparison
+
+### Security
+
+- **Mitigated Timing Side-Channel Attacks**:
+  - `FieldElement::pow()` and `mod_pow()` no longer leak exponent bits through timing
+  - `FieldElement::inv()` inherits protection from `pow()`
+  - `U1024::bits()` no longer reveals bit length through early returns
+  - `U1024::div_rem()` no longer reveals dividend size through variable iterations
+  - `conditional_select()` mask creation uses arithmetic instead of branches
+
+### References
+
+- [BearSSL Constant-Time Guidelines](https://www.bearssl.org/constanttime.html)
+- [subtle crate](https://docs.rs/subtle/latest/subtle/)
+
 ## [1.4.0] - 2026-01-06
 
 ### Added
